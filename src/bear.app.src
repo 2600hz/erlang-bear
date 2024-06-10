@@ -1,9 +1,9 @@
 {application, bear,
  [
-  {description, ""},
+  {description, "erlang stats"},
   {vsn, git},
   {registered, []},
-  {applications, []},
+  {applications, [kernel,stdlib]},
   {env, []},
   {modules, []}
  ]}.

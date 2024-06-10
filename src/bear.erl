@@ -25,11 +25,25 @@
 
 -module(bear).
 
--compile([export_all]).
+-export([get_statistics/1
+        ,get_statistics/2
+        ]).
 
--export([
-         get_statistics/1,
-         get_statistics/2
+%% unused but don't want export_all
+-export([get_statistics_subset/2
+        ,get_null_statistics_subset/2
+        ,calc_steps/1
+        ,level/1
+        ,report_subset/5
+        ,kendall_correlation/2
+        ,simple_ranking/1
+        ,tied_ranking/1
+        ,tied_ordered_ranking/1
+        ,tied_ordered_ranking/3
+        ,kendall_right_of/2
+        ,kendall_right_of_item/2
+        ,tied_add_prev/2
+        ,tied_rank_worker/3
         ]).
 
 -define(HIST_BINS, 10).
@@ -101,11 +115,11 @@ get_statistics_subset([_,_,_,_,_|_] = Values, Items) ->
     SortedValues = lists:sort(Values),
     Steps = calc_steps(Items),
     Scan_res = if Steps > 1 -> scan_values(Values);
-        true -> []
-    end,
+                  true -> []
+               end,
     Scan_res2 = if Steps > 2 -> scan_values2(Values, Scan_res);
-        true -> []
-    end,
+                   true -> []
+                end,
     report_subset(Items, Length, SortedValues, Scan_res, Scan_res2);
 get_statistics_subset(Values, Items) when is_list(Values) ->
     get_null_statistics_subset(Items, []).
@@ -119,11 +133,11 @@ get_null_statistics_subset([], Acc) ->
 
 calc_steps(Items) ->
     lists:foldl(
-        fun({I,_},Acc) ->
-            erlang:max(level(I), Acc);
-           (I,Acc) ->
-            erlang:max(level(I), Acc)
-    end, 1, Items).
+      fun({I,_},Acc) ->
+              erlang:max(level(I), Acc);
+         (I,Acc) ->
+              erlang:max(level(I), Acc)
+      end, 1, Items).
 
 level(standard_deviation) -> 3;
 level(variance          ) -> 3;
@@ -174,12 +188,12 @@ get_statistics(Values1, Values2) ->
 
 scan_values([X|Values]) ->
     scan_values(Values, #scan_result{n=1, sumX=X, sumXX=X*X,
-             sumLog=math_log(X),
-             max=X, min=X, sumInv=inverse(X)}).
+                                     sumLog=math_log(X),
+                                     max=X, min=X, sumInv=inverse(X)}).
 
 scan_values([X|Values],
-      #scan_result{n=N, sumX=SumX, sumXX=SumXX, sumLog=SumLog,
-                   max=Max, min=Min, sumInv=SumInv}=Acc) ->
+            #scan_result{n=N, sumX=SumX, sumXX=SumXX, sumLog=SumLog,
+                         max=Max, min=Min, sumInv=SumInv}=Acc) ->
     scan_values(Values,
                 Acc#scan_result{n=N+1, sumX=SumX+X, sumXX=SumXX+X*X,
                                 sumLog=SumLog+math_log(X),
@@ -197,7 +211,7 @@ scan_values2([X|Values], Mean, #scan_result2{x2=X2, x3=X3, x4=X4}=Acc) ->
     Diff3 = Diff2*Diff,
     Diff4 = Diff2*Diff2,
     scan_values2(Values, Mean, Acc#scan_result2{x2=X2+Diff2, x3=X3+Diff3,
-            x4=X4+Diff4});
+                                                x4=X4+Diff4});
 scan_values2([], _, Acc) ->
     Acc.
 
@@ -209,7 +223,7 @@ geometric_mean(#scan_result{n=N, sumLog=SumLog}) ->
     math:exp(SumLog/N).
 
 harmonic_mean(#scan_result{sumInv=Zero}) when Zero =:= 0 orelse
-                                              Zero =:= 0.0 ->
+                                              Zero =:= +0.0 ->
     %% Protect against divide by 0 if we have all 0 values
     0;
 harmonic_mean(#scan_result{n=N, sumInv=Sum}) ->
@@ -238,7 +252,7 @@ std_deviation(Scan_res, Scan_res2) ->
 %% }
 skewness(#scan_result{n=N}=Scan_res, #scan_result2{x3=X3}=Scan_res2) ->
     case math:pow(std_deviation(Scan_res,Scan_res2), 3) of
-        0.0 ->
+        +0.0 ->
             0.0;  %% Is this really the correct thing to do here?
         Else ->
             (X3/N)/Else
@@ -254,7 +268,7 @@ skewness(#scan_result{n=N}=Scan_res, #scan_result2{x3=X3}=Scan_res2) ->
 %% }
 kurtosis(#scan_result{n=N}=Scan_res, #scan_result2{x4=X4}=Scan_res2) ->
     case math:pow(std_deviation(Scan_res,Scan_res2), 4) of
-        0.0 ->
+        +0.0 ->
             0.0;  %% Is this really the correct thing to do here?
         Else ->
             ((X4/N)/Else) - 3
@@ -268,10 +282,10 @@ get_histogram(Values, Scan_res, Scan_res2) ->
                         ),
 
     Dict = lists:foldl(fun (Value, Dict) ->
-             update_bin(Value, Bins, Dict)
-           end,
-           dict:from_list([{Bin, 0} || Bin <- Bins]),
-           Values),
+                               update_bin(Value, Bins, Dict)
+                       end,
+                       dict:from_list([{Bin, 0} || Bin <- Bins]),
+                       Values),
 
     lists:sort(dict:to_list(Dict)).
 
@@ -291,14 +305,14 @@ get_covariance(Values1, Values2) when length(Values1) /= length(Values2) ->
     0.0;
 get_covariance(Values1, Values2) ->
     {SumX, SumY, N} = foldl2(fun (X, Y, {SumX, SumY, N}) ->
-             {SumX+X, SumY+Y, N+1}
-           end, {0,0,0}, Values1, Values2),
+                                     {SumX+X, SumY+Y, N+1}
+                             end, {0,0,0}, Values1, Values2),
     MeanX = SumX/N,
     MeanY = SumY/N,
     Sum = foldl2(fun (X, Y, Sum) ->
-       Sum + ((X - MeanX) * (Y - MeanY))
-     end,
-     0, Values1, Values2),
+                         Sum + ((X - MeanX) * (Y - MeanY))
+                 end,
+                 0, Values1, Values2),
     Sum/N.
 
 get_kendall_correlation(Values, _) when length(Values) < ?STATS_MIN ->
@@ -320,9 +334,9 @@ get_spearman_correlation(Values1, Values2) ->
     TR1 = ranks_of(Values1),
     TR2 = ranks_of(Values2),
     Numerator   = 6 * foldl2(fun (X, Y, Acc) ->
-             Diff = X-Y,
-             Acc + Diff*Diff
-           end, 0, TR1,TR2),
+                                     Diff = X-Y,
+                                     Acc + Diff*Diff
+                             end, 0, TR1,TR2),
     N = length(Values1),
     Denominator = math:pow(N,3)-N,
     1-(Numerator/Denominator).
@@ -351,12 +365,12 @@ get_pearson_correlation(Values1, Values2) when length(Values1) /= length(Values2
     0.0;
 get_pearson_correlation(Values1, Values2) ->
     {SumX, SumY, SumXX, SumYY, SumXY, N} =
-  foldl2(fun (X,Y,{SX, SY, SXX, SYY, SXY, N}) ->
-          {SX+X, SY+Y, SXX+X*X, SYY+Y*Y, SXY+X*Y, N+1}
-        end, {0,0,0,0,0,0}, Values1, Values2),
+        foldl2(fun (X,Y,{SX, SY, SXX, SYY, SXY, N}) ->
+                       {SX+X, SY+Y, SXX+X*X, SYY+Y*Y, SXY+X*Y, N+1}
+               end, {0,0,0,0,0,0}, Values1, Values2),
     Numer = (N*SumXY) - (SumX * SumY),
     case math:sqrt(((N*SumXX)-(SumX*SumX)) * ((N*SumYY)-(SumY*SumY))) of
-        0.0 ->
+        +0.0 ->
             0.0; %% Is this really the correct thing to do here?
         Denom ->
             Numer/Denom
@@ -374,7 +388,7 @@ foldl2(_F, Acc, [], []) ->
 %% wrapper for math:log/1 to avoid dividing by zero
 math_log(0) ->
     1;
-math_log(0.0) ->
+math_log(+0.0) ->
     1.0;
 math_log(X) when X < 0 ->
     0; % it's not possible to take a log of a negative number, return 0
@@ -384,7 +398,7 @@ math_log(X) ->
 %% wrapper for calculating inverse to avoid dividing by zero
 inverse(0) ->
     0;
-inverse(0.0) ->
+inverse(+0.0) ->
     0.0;
 inverse(X) ->
     1/X.
@@ -408,12 +422,12 @@ get_bin_list(_, _, Acc) ->
 
 round_bin(Bin) ->
     Base = case erlang:trunc(math:pow(10, round(math:log10(Bin) - 1))) of
-        0 ->
-            1;
-        Else ->
-            Else
-    end,
-    %io:format("bin ~p, base ~p~n", [Bin, Base]),
+               0 ->
+                   1;
+               Else ->
+                   Else
+           end,
+                                                %io:format("bin ~p, base ~p~n", [Bin, Base]),
     round_bin(Bin, Base).
 
 round_bin(Bin, Base) when Bin rem Base == 0 ->
@@ -421,14 +435,14 @@ round_bin(Bin, Base) when Bin rem Base == 0 ->
 round_bin(Bin, Base) ->
     Bin + Base - (Bin rem Base).
 
-% the following is up for debate as far as what the best method
-% of choosing bin counts and widths. these seem to work *good enough*
-% in my testing
+                                                % the following is up for debate as far as what the best method
+                                                % of choosing bin counts and widths. these seem to work *good enough*
+                                                % in my testing
 
-% bin width based on Sturges
-% http://www.jstor.org/pss/2965501
+                                                % bin width based on Sturges
+                                                % http://www.jstor.org/pss/2965501
 get_bin_width(StdDev, Count) ->
-    %io:format("stddev: ~p, count: ~p~n", [StdDev, Count]),
+                                                %io:format("stddev: ~p, count: ~p~n", [StdDev, Count]),
     case round((3.5 * StdDev) / math:pow(Count, 0.3333333)) of
         0 ->
             1;
@@ -436,19 +450,19 @@ get_bin_width(StdDev, Count) ->
             Else
     end.
 
-% based on the simple ceilng function at
-% http://en.wikipedia.org/wiki/Histograms#Number_of_bins_and_width
-% with a modification to attempt to get on bin beyond the max value
+                                                % based on the simple ceilng function at
+                                                % http://en.wikipedia.org/wiki/Histograms#Number_of_bins_and_width
+                                                % with a modification to attempt to get on bin beyond the max value
 get_bin_count(Min, Max, Width) ->
-    %io:format("min: ~p, max: ~p, width ~p~n", [Min, Max, Width]),
+                                                %io:format("min: ~p, max: ~p, width ~p~n", [Min, Max, Width]),
     round((Max - Min) / Width) + 1.
 
 %% taken from http://crunchyd.com/scutil/
 %% All code here is MIT Licensed
 %%  http://scutil.com/license.html
 
-% seems to match the value returned by the 'cor' (method="kendal") R function
-% http://en.wikipedia.org/wiki/Kendall_tau_rank_correlation_coefficient
+                                                % seems to match the value returned by the 'cor' (method="kendal") R function
+                                                % http://en.wikipedia.org/wiki/Kendall_tau_rank_correlation_coefficient
 kendall_correlation(List1, List2) when is_list(List1), is_list(List2) ->
     {RA,_} = lists:unzip(tied_ordered_ranking(List1)),
     {RB,_} = lists:unzip(tied_ordered_ranking(List2)),
